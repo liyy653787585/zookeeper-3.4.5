@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.jute.BinaryInputArchive;
 import org.apache.jute.BinaryOutputArchive;
@@ -351,7 +352,9 @@ public class Learner {
                 System.exit(13);
 
             }
+            //记录最后一次处理的zxid
             zk.getZKDatabase().setlastProcessedZxid(qp.getZxid());
+            //初始化会话sessionId
             zk.createSessionTracker();            
             
             long lastQueued = 0;
@@ -359,6 +362,7 @@ public class Learner {
             // in V1.0 we take a snapshot when we get the NEWLEADER message, but in pre V1.0
             // we take the snapshot at the UPDATE, since V1.0 also gets the UPDATE (after the NEWLEADER)
             // we need to make sure that we don't take the snapshot twice.
+            //兼容V1.0及以前版本，确保不要重复生成快照
             boolean snapshotTaken = false;
             // we are now going to start getting transactions to apply followed by an UPTODATE
             outerLoop:
@@ -380,10 +384,12 @@ public class Learner {
                     break;
                 case Leader.COMMIT:
                     if (!snapshotTaken) {
+                        //按顺序进行commit
                         pif = packetsNotCommitted.peekFirst();
                         if (pif.hdr.getZxid() != qp.getZxid()) {
                             LOG.warn("Committing " + qp.getZxid() + ", but next proposal is " + pif.hdr.getZxid());
                         } else {
+                            //将node数据变更应用到zk内存数据库
                             zk.processTxn(pif.hdr, pif.rec);
                             packetsNotCommitted.remove();
                         }
@@ -401,7 +407,8 @@ public class Learner {
                         zk.takeSnapshot();
                         self.setCurrentEpoch(newEpoch);
                     }
-                    self.cnxnFactory.setZooKeeperServer(zk);                
+                    self.cnxnFactory.setZooKeeperServer(zk);
+                    //数据同步完之后跳出while循环，代码继续往下走
                     break outerLoop;
                 case Leader.NEWLEADER: // it will be NEWLEADER in v1.0
                     zk.takeSnapshot();
@@ -413,12 +420,16 @@ public class Learner {
             }
         }
         ack.setZxid(ZxidUtils.makeZxid(newEpoch, 0));
+        //返回ack给leader
         writePacket(ack, true);
         sock.setSoTimeout(self.tickTime * self.syncLimit);
+        //初始化session
+        //初始化processor处理链条FollowerZooKeeperServer
         zk.startup();
         // We need to log the stuff that came in between the snapshot and the uptodate
         if (zk instanceof FollowerZooKeeperServer) {
             FollowerZooKeeperServer fzk = (FollowerZooKeeperServer)zk;
+            //收到leader的PROPOSAL请求进行写事务日志&flush操作
             for(PacketInFlight p: packetsNotCommitted) {
                 fzk.logRequest(p.hdr, p.rec);
             }
@@ -477,6 +488,21 @@ public class Learner {
         // shutdown previous zookeeper
         if (zk != null) {
             zk.shutdown();
+        }
+    }
+
+    public static void main(String[] args) {
+        String a = "a";
+        AtomicInteger atomicInteger = new AtomicInteger();
+        while (true){
+            System.out.println("下一轮循环" + atomicInteger.getAndIncrement());
+            switch (a) {
+                case "a":
+                    System.out.println("a");
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }

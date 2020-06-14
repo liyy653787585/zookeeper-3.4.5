@@ -109,6 +109,7 @@ public class SyncRequestProcessor extends Thread implements RequestProcessor {
                     // track the number of records written to the log
                     if (zks.getZKDatabase().append(si)) {
                         logCount++;
+                        //事务日志写入数量达标时生成快照
                         if (logCount > (snapCount / 2 + randRoll)) {
                             randRoll = r.nextInt(snapCount/2);
                             // roll the log
@@ -135,6 +136,8 @@ public class SyncRequestProcessor extends Thread implements RequestProcessor {
                         // iff this is a read, and there are no pending
                         // flushes (writes), then just pass this to the next
                         // processor
+
+                        //如果没有事务日志需要flush到磁盘上则直接调用下一个processor进行处理
                         nextProcessor.processRequest(si);
                         if (nextProcessor instanceof Flushable) {
                             ((Flushable)nextProcessor).flush();
@@ -142,6 +145,7 @@ public class SyncRequestProcessor extends Thread implements RequestProcessor {
                         continue;
                     }
                     toFlush.add(si);
+                    //每1000条事务日志进行一次flush磁盘
                     if (toFlush.size() > 1000) {
                         flush(toFlush);
                     }
