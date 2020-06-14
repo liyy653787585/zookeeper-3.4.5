@@ -19,6 +19,9 @@
 *.iml
 *.ipr
 
+### Eclipse ###
+.eclipse
+
 ### NetBeans ###
 /nbproject/private/
 /build/
