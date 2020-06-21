@@ -87,6 +87,17 @@ public class SessionTrackerImpl extends Thread implements SessionTracker {
 
     private long roundToInterval(long time) {
         // We give a one interval grace period
+        //expirationInterval：用来后续在后台线程里每隔这么多时间检查session是否过期的
+        //默认和ticktime是一样大的，默认2000ms，2s
+
+        //默认是：（12:05 / 2s + 1） * 2s
+        // (2 / 2 + 1) * 2 = 4
+        // (3 / 2 + 1) * 2 = 4
+
+        // (6 / 2 + 1) * 2 = 8
+        // (7 / 2 + 1) * 2 = 8
+
+        //让你的expire，过期时间，应该是expirationInterval的倍数
         return (time / expirationInterval + 1) * expirationInterval;
     }
 
@@ -140,6 +151,12 @@ public class SessionTrackerImpl extends Thread implements SessionTracker {
     @Override
     synchronized public void run() {
         try {
+            /**
+             * 这样子岂不是session会在zk选举期间就被杀掉？
+             * 事实上并不是，一旦zk集群不可用，running变量就会变为false，
+             * 而且sessionSets就会持久化到zk数据库，这样循环就会结束，
+             * 等到zk恢复正常后，再重新恢复原先的session。
+             */
             while (running) {
                 currentTime = System.currentTimeMillis();
                 if (nextExpirationTime > currentTime) {
@@ -147,13 +164,17 @@ public class SessionTrackerImpl extends Thread implements SessionTracker {
                     continue;
                 }
                 SessionSet set;
+                //删除对应过期时间的分桶，比如把12:03这个分桶删除掉
                 set = sessionSets.remove(nextExpirationTime);
+                //过期掉这个分桶中的所有session会话
                 if (set != null) {
                     for (SessionImpl s : set.sessions) {
                         setSessionClosing(s.sessionId);
                         expirer.expire(s);
                     }
                 }
+
+                //更新了下次过期的分桶对应的时间，12：02 + 120s = 12:04分桶
                 nextExpirationTime += expirationInterval;
             }
         } catch (InterruptedException e) {
@@ -174,15 +195,29 @@ public class SessionTrackerImpl extends Thread implements SessionTracker {
         if (s == null || s.isClosing()) {
             return false;
         }
+        //就是下次这个session下一次过期时间
+        //当前时间：12:03 , timeout:120s, expireTime：12:05
         long expireTime = roundToInterval(System.currentTimeMillis() + timeout);
         if (s.tickTime >= expireTime) {
             // Nothing needs to be done
             return true;
         }
+
+        //expireTime统一都是expirationInterval的倍数（=tickTime，2s，在zk的配置文件里，zoo.cfg里配置的）
+        //检查的效率会提高
+        //先检查100倍的那个分桶的session有没有过期
+        //然后检查105倍的那个分桶的session有没有过期
+        {
+            //expireTime(12:05):SessionSet(<会话1，会话2，会话3>),
+            //expireTime(12:10):SessionSet(<会话4，会话5，会话6>)
+        }
+        //进行分桶管理
+        //从老桶里删除这个session会话
         SessionSet set = sessionSets.get(s.tickTime);
         if (set != null) {
             set.sessions.remove(s);
         }
+        //将此session会话挪动到新桶中
         s.tickTime = expireTime;
         set = sessionSets.get(s.tickTime);
         if (set == null) {
@@ -233,6 +268,9 @@ public class SessionTrackerImpl extends Thread implements SessionTracker {
 
 
     synchronized public long createSession(int sessionTimeout) {
+        //步骤1：生成一个唯一的sessionId
+        //步骤2：在几个核心的内存结构中放入这个session
+        //步骤3：对session计算他的过期时间以及进行特殊处理
         addSession(nextSessionId, sessionTimeout);
         return nextSessionId++;
     }
@@ -254,6 +292,7 @@ public class SessionTrackerImpl extends Thread implements SessionTracker {
                         + Long.toHexString(id) + " " + sessionTimeout);
             }
         }
+        //分桶管理
         touchSession(id, sessionTimeout);
     }
 

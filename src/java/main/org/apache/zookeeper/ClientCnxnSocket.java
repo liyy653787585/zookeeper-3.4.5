@@ -140,6 +140,7 @@ abstract class ClientCnxnSocket {
         }
 
         this.sessionId = conRsp.getSessionId();
+        //已经成功建立了连接
         sendThread.onConnected(conRsp.getTimeOut(), this.sessionId,
                 conRsp.getPasswd(), isRO);
     }

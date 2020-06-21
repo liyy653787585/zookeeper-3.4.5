@@ -58,15 +58,27 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
     
     @Override
     protected void setupRequestProcessors() {
+        // 后续的善后工作，返回响应
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(
                 finalProcessor, getLeader().toBeApplied);
+
+        //首先把请求commit应用到自己内存数据库里去
+        //接着可以发送commit请求给所有的follower，让follower把commit也应用到自己的内存数据库中
+        //只要进入内存数据库，客户端就可以读到了
         commitProcessor = new CommitProcessor(toBeAppliedProcessor,
                 Long.toString(getServerId()), false);
         commitProcessor.start();
+
+        // 负责2PC的同步，先从outstandingQueue中获取出来
+        //（1）先将proposal写入本地事务日志里去
+        //（2）把proposal发送给素有的follower，所有的follower也需要写入自己的本地事务日志里去
+        //（3）最后等待过半的follower对这个请求返回ack
         ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this,
                 commitProcessor);
         proposalProcessor.initialize();
+
+        //封装请求头，将请求放入outstandingQueue中
         firstProcessor = new PrepRequestProcessor(this, proposalProcessor);
         ((PrepRequestProcessor)firstProcessor).start();
     }

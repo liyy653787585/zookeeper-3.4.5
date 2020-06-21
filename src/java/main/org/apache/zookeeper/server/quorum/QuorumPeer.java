@@ -407,6 +407,7 @@ public class QuorumPeer extends Thread implements QuorumStats.Provider {
     @Override
     public synchronized void start() {
         loadDataBase();
+        //启动NIOServerCnxnFactory线程，监听zkClient连接请求
         cnxnFactory.start();        
         startLeaderElection();
         super.start();

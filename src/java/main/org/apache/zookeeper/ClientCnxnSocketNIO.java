@@ -64,7 +64,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
-        if (sockKey.isReadable()) {
+        if (sockKey.isReadable()) {//有数据可以读取，比如发送出去请求的响应
+            //或者是zk服务端反向推送给你的事件通知
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
                 throw new EndOfStreamException(
@@ -78,7 +79,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     recvCount++;
                     readLength();
                 } else if (!initialized) {
+                    //如果是connectResult
                     readConnectResult();
+                    //关注read事件
                     enableRead();
                     if (findSendablePacket(outgoingQueue,
                             cnxn.sendThread.clientTunneledAuthenticationInProgress()) != null) {
@@ -114,6 +117,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                         }
                         p.createBB();
                     }
+                    //发送请求出去
                     sock.write(p.bb);
                     if (!p.bb.hasRemaining()) {
                         sentCount++;
@@ -122,6 +126,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                                 && p.requestHeader.getType() != OpCode.ping
                                 && p.requestHeader.getType() != OpCode.auth) {
                             synchronized (pendingQueue) {
+                                //将请求放入待响应队列中去
                                 pendingQueue.add(p);
                             }
                         }
@@ -264,6 +269,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     throws IOException {
         sockKey = sock.register(selector, SelectionKey.OP_CONNECT);
         boolean immediateConnect = sock.connect(addr);
+        //物理连接建立完成后，初始化session会话
         if (immediateConnect) {
             sendThread.primeConnection();
         }
@@ -352,6 +358,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     sendThread.primeConnection();
                 }
             } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                //关注读写请求
                 doIO(pendingQueue, outgoingQueue, cnxn);
             }
         }

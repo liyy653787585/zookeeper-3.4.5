@@ -86,6 +86,7 @@ public class NIOServerCnxn extends ServerCnxn {
     /**
      * This is the id that uniquely identifies the session of a client. Once
      * this session is no longer active, the ephemeral nodes will go away.
+     * 这是唯一标识客户端会话的ID。 一旦此会话不再活动，临时节点将消失
      */
     long sessionId;
 
@@ -159,11 +160,13 @@ public class NIOServerCnxn extends ServerCnxn {
                 }
                 // if there is nothing left to send, we are done
                 if (bb.remaining() == 0) {
-                    packetSent();
+                    packetSent();// 如果发送完毕直接结束
                     return;
                 }
             }
 
+            //能走到这里说明发生了拆包
+            //outgoingBuffers进行排队解决拆包问题
             synchronized(this.factory){
                 sk.selector().wakeup();
                 if (LOG.isTraceEnabled()) {
@@ -172,6 +175,7 @@ public class NIOServerCnxn extends ServerCnxn {
                 }
                 outgoingBuffers.add(bb);
                 if (sk.isValid()) {
+                    //让自己关注客户端的OP_WRITE事件
                     sk.interestOps(sk.interestOps() | SelectionKey.OP_WRITE);
                 }
             }
@@ -194,11 +198,14 @@ public class NIOServerCnxn extends ServerCnxn {
         }
 
         if (incomingBuffer.remaining() == 0) { // have we read length bytes?
-            packetReceived();
+            packetReceived();   //如果读取完毕了，那么就可以对请求进行处理
             incomingBuffer.flip();
+            //处理zkClient连接请求
+            //还没有完成session的初始化，此时一定读取的第一个请求一定是connectRequest请求
             if (!initialized) {
                 readConnectRequest();
             } else {
+                //处理zkClient读写请求、ping请求
                 readRequest();
             }
             lenBuffer.clear();
@@ -222,17 +229,18 @@ public class NIOServerCnxn extends ServerCnxn {
                             + Long.toHexString(sessionId)
                             + ", likely client has closed socket");
                 }
-                if (incomingBuffer.remaining() == 0) {
+                if (incomingBuffer.remaining() == 0) {//如果读取到了4个字节
                     boolean isPayload;
                     if (incomingBuffer == lenBuffer) { // start of next request
-                        incomingBuffer.flip();
-                        isPayload = readLength(k);
+                        incomingBuffer.flip();//先读取当前这个请求的长度
+                        isPayload = readLength(k);//然后根据长度创建一个btyeBuff
                         incomingBuffer.clear();
                     } else {
                         // continuation
                         isPayload = true;
                     }
                     if (isPayload) { // not the case for 4letterword
+                        //读取有效数据包
                         readPayload();
                     }
                     else {
@@ -1073,6 +1081,7 @@ public class NIOServerCnxn extends ServerCnxn {
             byte b[] = baos.toByteArray();
             ByteBuffer bb = ByteBuffer.wrap(b);
             bb.putInt(b.length - 4).rewind();
+            //发送buffer
             sendBuffer(bb);
             if (h.getXid() > 0) {
                 synchronized(this){

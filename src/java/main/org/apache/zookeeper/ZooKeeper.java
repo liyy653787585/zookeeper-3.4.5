@@ -83,6 +83,7 @@ import java.util.*;
  * EventNone and state sKeeperStateDisconnected.
  *
  */
+//zookeeper客户端组件，curator框架客户端就是对其进行的封装
 public class ZooKeeper {
 
     public static final String ZOOKEEPER_CLIENT_CNXN_SOCKET = "zookeeper.clientCnxnSocket";

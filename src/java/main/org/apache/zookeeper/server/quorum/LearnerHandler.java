@@ -308,7 +308,8 @@ public class LearnerHandler extends Thread {
             
             /* we are sending the diff check if we have proposals in memory to be able to 
              * send a diff to the 
-             */ 
+             */
+            //如果follower是第一次和leader进行连接、注册之后，会进行数据同步
             ReentrantReadWriteLock lock = leader.zk.getZKDatabase().getLogLock();
             ReadLock rl = lock.readLock();
             try {
@@ -429,6 +430,7 @@ public class LearnerHandler extends Thread {
             bufferedOutput.flush();
             
             // Start sending packets
+            // follower数据同步完之后，启动1个新线程用于follower后续增量数据同步
             new Thread() {
                 public void run() {
                     Thread.currentThread().setName(
@@ -471,6 +473,7 @@ public class LearnerHandler extends Thread {
             //
             queuedPackets.add(new QuorumPacket(Leader.UPTODATE, -1, null, null));
 
+            //接收follower的请求或响应
             while (true) {
                 qp = new QuorumPacket();
                 ia.readRecord(qp, "packet");

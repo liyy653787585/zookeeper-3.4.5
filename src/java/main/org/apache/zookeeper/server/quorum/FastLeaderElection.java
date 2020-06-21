@@ -214,7 +214,11 @@ public class FastLeaderElection implements Election {
                          * learner in the future, we'll have to change the
                          * way we check for observers.
                          */
-                        //对收到其他peer的投票进行回应，返回当前提议的leader
+                        /*
+                            接收到observer的消息立即做出回应，不参与投票选举
+                            如果peer不是follower的话，那么它一定是observer，
+                            如果将来新增其他类型的话，那么判断是否为observer就不能用这种方式了
+                         */
                         if(!self.getVotingView().containsKey(response.sid)){
                             Vote current = self.getCurrentVote();
                             ToSend notmsg = new ToSend(ToSend.mType.notification,
@@ -228,6 +232,7 @@ public class FastLeaderElection implements Election {
                             sendqueue.offer(notmsg);
                         } else {
                             // Receive new message
+                            //处理来自follower的新消息
                             if (LOG.isDebugEnabled()) {
                                 LOG.debug("Receive new notification message. My id = "
                                         + self.getId());
@@ -288,10 +293,9 @@ public class FastLeaderElection implements Election {
                              * If this server is looking, then send proposed leader
                              */
 
-                            //正在选举的逻辑
+                            //当前peer还是looking状态的处理
                             if(self.getPeerState() == QuorumPeer.ServerState.LOOKING){
-                                //todo 真坑，容易看错
-                                // 将QuorumCnxManager组件中recvQueue的message放入自己的recvqueue中
+                                // TODO: 真坑，容易看错 将QuorumCnxManager组件中recvQueue的message放入自己的recvqueue中
                                 recvqueue.offer(n);
 
                                 /*
@@ -315,6 +319,11 @@ public class FastLeaderElection implements Election {
                                 /*
                                  * If this server is not looking, but the one that sent the ack
                                  * is looking, then send back what it believes to be the leader.
+                                 */
+
+                                /*
+                                 *  如果当前节点不是looking状态，说明已经选择出leader（即leader = currentVote）
+                                 *  此时直接把leader给其他peer直接返回即可
                                  */
                                 Vote current = self.getCurrentVote();
                                 if(ackstate == QuorumPeer.ServerState.LOOKING){

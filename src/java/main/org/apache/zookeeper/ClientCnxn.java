@@ -955,6 +955,7 @@ public class ClientCnxn {
             }
             logStartConnect(addr);
 
+            //建立socket物理连接和session会话
             clientCnxnSocket.connect(addr);
         }
 
@@ -990,6 +991,7 @@ public class ClientCnxn {
                         if (closing || !state.isAlive()) {
                             break;
                         }
+                        //建立socket物理连接和session会话
                         startConnect();
                         clientCnxnSocket.updateLastSendAndHeard();
                     }
@@ -1038,10 +1040,14 @@ public class ClientCnxn {
                                         + " for sessionid 0x"
                                         + Long.toHexString(sessionId));
                     }
+
+                    //发送ping请求，维持session会话
                     if (state.isConnected()) {
+                        //getIdleSend 已经有多长时间没发送消息到服务去了
                         int timeToNextPing = readTimeout / 2
                                 - clientCnxnSocket.getIdleSend();
                         if (timeToNextPing <= 0) {
+                            //每隔一段时间发送ping给服务端
                             sendPing();
                             clientCnxnSocket.updateLastSend();
                         } else {
@@ -1065,6 +1071,8 @@ public class ClientCnxn {
                         to = Math.min(to, pingRwTimeout - idlePingRwServer);
                     }
 
+                    //最核心的一点
+                    //基于clientCnxnSocket将outgoingQueue中的数据发送出去
                     clientCnxnSocket.doTransport(to, pendingQueue, outgoingQueue, ClientCnxn.this);
                 } catch (Throwable e) {
                     if (closing) {
@@ -1199,7 +1207,8 @@ public class ClientCnxn {
             readTimeout = negotiatedSessionTimeout * 2 / 3;
             connectTimeout = negotiatedSessionTimeout / hostProvider.size();
             hostProvider.onConnected();
-            sessionId = _sessionId;
+            //受到connectResponse后初始化client本地的session会话信息
+            sessionId = _sessionId;//服务端生成的sessionId
             sessionPasswd = _sessionPasswd;
             state = (isRO) ?
                     States.CONNECTEDREADONLY : States.CONNECTED;
@@ -1211,9 +1220,11 @@ public class ClientCnxn {
                     + (isRO ? " (READ-ONLY mode)" : ""));
             KeeperState eventState = (isRO) ?
                     KeeperState.ConnectedReadOnly : KeeperState.SyncConnected;
+
             eventThread.queueEvent(new WatchedEvent(
                     Watcher.Event.EventType.None,
                     eventState, null));
+            //会话初始化完毕（即接收到connectResponse），服务端会通过一个watchedEvent来回调客户端的watcher通知你
         }
 
         void close() {

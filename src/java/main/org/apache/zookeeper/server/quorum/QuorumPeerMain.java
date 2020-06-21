@@ -126,6 +126,8 @@ public class QuorumPeerMain {
   
       LOG.info("Starting quorum peer");
       try {
+          //会启动一个server（默认为 NIOServerCnxnFactory），监听一个端口 2181？
+          //让客户端跟它进行连接，发送请求
           ServerCnxnFactory cnxnFactory = ServerCnxnFactory.createFactory();
           cnxnFactory.configure(config.getClientPortAddress(),
                                 config.getMaxClientCnxns());

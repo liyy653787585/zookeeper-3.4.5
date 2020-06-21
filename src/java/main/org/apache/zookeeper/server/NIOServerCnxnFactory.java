@@ -110,6 +110,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     @Override
     public void start() {
         // ensure thread is started once and only once
+        //确保线程仅启动一次
         if (thread.getState() == Thread.State.NEW) {
             thread.start();
         }
@@ -184,6 +185,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                         selected);
                 Collections.shuffle(selectedList);
                 for (SelectionKey k : selectedList) {
+                    //处理zkClient tcp连接建立请求
                     if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
                         SocketChannel sc = ((ServerSocketChannel) k
                                 .channel()).accept();
@@ -203,8 +205,11 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                             sk.attach(cnxn);
                             addCnxn(cnxn);
                         }
-                    } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                    }
+                    //处理客户端发送的请求，或者是返回响应给客户端
+                    else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
                         NIOServerCnxn c = (NIOServerCnxn) k.attachment();
+                        //处理读写请求，初始化与zkClient的session会话信息
                         c.doIO(k);
                     } else {
                         if (LOG.isDebugEnabled()) {

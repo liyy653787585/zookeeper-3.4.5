@@ -33,6 +33,7 @@ import java.util.Random;
 
 import javax.security.sasl.SaslException;
 
+import com.sun.xml.internal.bind.v2.TODO;
 import org.apache.jute.BinaryInputArchive;
 import org.apache.jute.BinaryOutputArchive;
 import org.apache.jute.Record;
@@ -516,6 +517,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     long createSession(ServerCnxn cnxn, byte passwd[], int timeout) {
+        // TODO: 2020-06-21 sessionTracker实现类是 LearnerSessionTracker ？
+        //生成sessionId follower -> sessionTracker = LearnerSessionTracker
+        //SessionTrackerImpl？？？
         long sessionId = sessionTracker.createSession(timeout);
         Random r = new Random(sessionId ^ superSecret);
         r.nextBytes(passwd);
@@ -642,6 +646,14 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             }
         }
         try {
+            /**
+             * 不管是ping，还是别的任何请求，最后都会来执行submitRequest，都会执行下边的touch操作
+             * touch操作会更新服务端的session会话过期时间，进行续订会话操作
+             * 比如：
+             * 原来的过期时间为 12：05
+             * 但在12：04收到一个请求，那么新的过期时间为 12：04 + 120s = 12：06，
+             * 从而将expireTime处理为expirationInterval的倍数，重新进行分桶
+             */
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
@@ -825,8 +837,11 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         cnxn.setSessionTimeout(sessionTimeout);
         // We don't want to receive any packets until we are sure that the
         // session is setup
+        //在连接建立之前不接收zkClient数据包（不关注read事件）
         cnxn.disableRecv();
         long sessionId = connReq.getSessionId();
+        //第一次连接sessionId为0
+        //sessionId为不为0时，证明之前服务端创建过session会话，zkClient尝试续订会话
         if (sessionId != 0) {
             long clientSessionId = connReq.getSessionId();
             LOG.info("Client attempting to renew session 0x"
@@ -836,6 +851,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             cnxn.setSessionId(sessionId);
             reopenSession(cnxn, sessionId, passwd, sessionTimeout);
         } else {
+            //zkClient尝试建立新的会话
             LOG.info("Client attempting to establish new session at "
                     + cnxn.getRemoteSocketAddress());
             createSession(cnxn, passwd, sessionTimeout);
@@ -910,6 +926,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(),
                   h.getType(), incomingBuffer, cnxn.getAuthInfo());
                 si.setOwner(ServerCnxn.me);
+                //processor处理
                 submitRequest(si);
             }
         }
@@ -963,6 +980,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         int opCode = hdr.getType();
         long sessionId = hdr.getClientId();
         //将数据应用到zk内存数据库中
+        //针对closeSession会将session相关的临时节点全部删除
         rc = getZKDatabase().processTxn(hdr, txn);
         if (opCode == OpCode.createSession) {
             if (txn instanceof CreateSessionTxn) {
@@ -975,6 +993,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                         + txn.toString());
             }
         } else if (opCode == OpCode.closeSession) {
+            //在sessionTracker的核心数据结构中删除对应session
             sessionTracker.removeSession(sessionId);
         }
         return rc;

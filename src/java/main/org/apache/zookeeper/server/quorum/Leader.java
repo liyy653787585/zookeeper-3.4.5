@@ -357,6 +357,7 @@ public class Leader {
 
             // Start thread that waits for connection requests from 
             // new followers.
+            // 开启线程等待follower建立连接请求
             cnxAcceptor = new LearnerCnxAcceptor();
             cnxAcceptor.start();
             

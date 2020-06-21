@@ -257,8 +257,8 @@ public class Learner {
          */
     	long lastLoggedZxid = self.getLastLoggedZxid();
         QuorumPacket qp = new QuorumPacket();                
-        qp.setType(pktType);
-        qp.setZxid(ZxidUtils.makeZxid(self.getAcceptedEpoch(), 0));
+        qp.setType(pktType);//我的类型
+        qp.setZxid(ZxidUtils.makeZxid(self.getAcceptedEpoch(), 0));// 我最大的一个zxid
         
         /*
          * Add sid to payload
@@ -290,6 +290,7 @@ public class Learner {
         		throw new IOException("Leaders epoch, " + newEpoch + " is less than accepted epoch, " + self.getAcceptedEpoch());
         	}
         	QuorumPacket ackNewEpoch = new QuorumPacket(Leader.ACKEPOCH, lastLoggedZxid, epochBytes, null);
+        	//发送请求给leader
         	writePacket(ackNewEpoch, true);
             return ZxidUtils.makeZxid(newEpoch, 0);
         } else {
@@ -354,7 +355,7 @@ public class Learner {
             }
             //记录最后一次处理的zxid
             zk.getZKDatabase().setlastProcessedZxid(qp.getZxid());
-            //初始化会话sessionId
+            //初始化会话追踪器sessionTracker
             zk.createSessionTracker();            
             
             long lastQueued = 0;
