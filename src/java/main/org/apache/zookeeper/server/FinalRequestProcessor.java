@@ -290,6 +290,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                         ZooDefs.Perms.READ,
                         request.authInfo);
                 Stat stat = new Stat();
+                //如果watch=true时将serverCnxn(代表与客户端的nio连接)注册到服务端的watchManager中
                 byte b[] = zks.getZKDatabase().getData(getDataRequest.getPath(), stat,
                         getDataRequest.getWatch() ? cnxn : null);
                 rsp = new GetDataResponse(b, stat);
@@ -402,6 +403,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                     request.createTime, System.currentTimeMillis());
 
         try {
+            //返回响应
             cnxn.sendResponse(hdr, rsp, "response");
             if (closeSession) {
                 cnxn.sendCloseSession();

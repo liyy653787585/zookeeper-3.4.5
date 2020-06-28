@@ -129,6 +129,10 @@ public class ZooKeeper {
      * API.
      */
     private static class ZKWatchManager implements ClientWatchManager {
+        /**
+         * path -> watcher集合
+         * 对每个路径，都会有一系列的监听器
+         */
         private final Map<String, Set<Watcher>> dataWatches =
             new HashMap<String, Set<Watcher>>();
         private final Map<String, Set<Watcher>> existWatches =
@@ -1139,12 +1143,14 @@ public class ZooKeeper {
             wcb = new DataWatchRegistration(watcher, clientPath);
         }
 
+        //如果指定根路径的话，拼接根路径
         final String serverPath = prependChroot(clientPath);
 
         RequestHeader h = new RequestHeader();
         h.setType(ZooDefs.OpCode.getData);
         GetDataRequest request = new GetDataRequest();
         request.setPath(serverPath);
+        //代表是否需要watch监听
         request.setWatch(watcher != null);
         GetDataResponse response = new GetDataResponse();
         ReplyHeader r = cnxn.submitRequest(h, request, response, wcb);

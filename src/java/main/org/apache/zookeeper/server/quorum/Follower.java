@@ -124,9 +124,13 @@ public class Follower extends Learner{
                         + Long.toHexString(lastQueued + 1));
             }
             lastQueued = hdr.getZxid();
+            //写入本地事务日志
+            //向leader返回ack响应
+            //在pendingTxns放入待提交的请求
             fzk.logRequest(hdr, txn);
             break;
         case Leader.COMMIT:
+            //如果zxid和pendingTxns的第一个元素相等，那么交给commitProcessor进行提交
             fzk.commit(qp.getZxid());
             break;
         case Leader.UPTODATE:

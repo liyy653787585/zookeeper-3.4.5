@@ -564,12 +564,14 @@ public class Leader {
                     Long.toHexString(zxid), followerAddr);
             return;
         }
-        
+
+        //统计收到的ack数量
         p.ackSet.add(sid);
         if (LOG.isDebugEnabled()) {
             LOG.debug("Count for zxid: 0x{} is {}",
                     Long.toHexString(zxid), p.ackSet.size());
         }
+        //判断指定的proposal收到的ack数量是否满足大多数的条件
         if (self.getQuorumVerifier().containsQuorum(p.ackSet)){             
             if (zxid != lastCommitted+1) {
                 LOG.warn("Commiting zxid 0x{} from {} not first!",
@@ -585,11 +587,18 @@ public class Leader {
                 if (p.request == null) {
                     LOG.warn("Going to commmit null request for proposal: {}", p);
                 }
+                //给所有follower发送commit
                 commit(zxid);
+                //给所有observers发送通知
                 inform(p);
+                //committedRequests.add
+                //调用FinalRequestProcessor
+                //（1）将数据应用到zk内存数据库中
+                //（2）向客户端返回响应
                 zk.commitProcessor.commit(p.request);
                 if(pendingSyncs.containsKey(zxid)){
                     for(LearnerSyncRequest r: pendingSyncs.remove(zxid)) {
+                        //给阻塞的服务发送同步消息请求
                         sendSync(r);
                     }
                 }
@@ -639,6 +648,9 @@ public class Leader {
          */
         public void processRequest(Request request) throws RequestProcessorException {
             // request.addRQRec(">tobe");
+            // 调用FinalRequestProcessor进行处理
+            //（1）将数据应用到zk内存数据库中
+            //（2）向客户端返回响应
             next.processRequest(request);
             Proposal p = toBeApplied.peek();
             if (p != null && p.request != null

@@ -288,6 +288,12 @@ public class ClientCnxn {
                 } else if (request != null) {
                     request.serialize(boa, "request");
                 }
+
+                /**
+                 * 在进行序列化的时候，都会带上一个boolean值 watch = true
+                 * 此时就会告诉zk服务端，这个客户端需要对这个znode进行监听它的变化
+                 */
+
                 baos.close();
                 this.bb = ByteBuffer.wrap(baos.toByteArray());
                 this.bb.putInt(this.bb.capacity() - 4);
@@ -460,6 +466,8 @@ public class ClientCnxn {
             sessionState = event.getState();
 
             // materialize the watchers based on the event
+            //根据path删除客户端本地注册的监听
+            //将path对应的watch全部封装到set中，便于处理
             WatcherSetEventPair pair = new WatcherSetEventPair(
                     watcher.materialize(event.getState(), event.getType(),
                             event.getPath()),
@@ -488,10 +496,13 @@ public class ClientCnxn {
            try {
               isRunning = true;
               while (true) {
+                  //zk服务端反向推送过来的event事件，
+                  //然后负责回调监听事件的watcher
                  Object event = waitingEvents.take();
                  if (event == eventOfDeath) {
                     wasKilled = true;
                  } else {
+                     //回调watch监听逻辑
                     processEvent(event);
                  }
                  if (wasKilled)
@@ -514,14 +525,16 @@ public class ClientCnxn {
               if (event instanceof WatcherSetEventPair) {
                   // each watcher will process the event
                   WatcherSetEventPair pair = (WatcherSetEventPair) event;
+                  //触发事件的路径，获取到客户端针对这个路径注册的一系列watch并执行回调
                   for (Watcher watcher : pair.watchers) {
                       try {
+                          //回调watch监听的自定义逻辑
                           watcher.process(pair.event);
                       } catch (Throwable t) {
                           LOG.error("Error while calling watcher ", t);
                       }
                   }
-              } else {
+              } else {//处理getData/setData等请求的响应
                   Packet p = (Packet) event;
                   int rc = 0;
                   String clientPath = p.clientPath;
@@ -738,6 +751,8 @@ public class ClientCnxn {
                     LOG.debug("Got notification sessionid:0x"
                         + Long.toHexString(sessionId));
                 }
+
+                //在这里收到事件监听，先进行反序列化
                 WatcherEvent event = new WatcherEvent();
                 event.deserialize(bbia, "response");
 
@@ -755,12 +770,14 @@ public class ClientCnxn {
                     }
                 }
 
+                //再进行包装成WatchedEvent
                 WatchedEvent we = new WatchedEvent(event);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Got " + we + " for sessionid 0x"
                             + Long.toHexString(sessionId));
                 }
 
+                //将WatchedEvent放入队列
                 eventThread.queueEvent( we );
                 return;
             }
@@ -816,6 +833,10 @@ public class ClientCnxn {
                             + Long.toHexString(sessionId) + ", packet:: " + packet);
                 }
             } finally {
+                /**
+                 * 收到服务端的响应之后，针对getData()/getChildren()/exists()请求
+                 * 将watch注册到zkWatchManager中
+                 */
                 finishPacket(packet);
             }
         }
@@ -1316,6 +1337,7 @@ public class ClientCnxn {
         Packet packet = queuePacket(h, r, request, response, null, null, null,
                     null, watchRegistration);
         synchronized (packet) {
+            //直到你的请求发送完毕，同时接收到响应之后，这里才会退出
             while (!packet.finished) {
                 packet.wait();
             }

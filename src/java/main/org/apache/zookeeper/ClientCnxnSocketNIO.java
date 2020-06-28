@@ -94,6 +94,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     updateLastHeard();
                     initialized = true;
                 } else {
+                    //读取服务端ack响应
+                    //针对getData(/getChildren()/exists()请求进行watch注册
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
@@ -119,8 +121,10 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     }
                     //发送请求出去
                     sock.write(p.bb);
+                    //处理拆包
                     if (!p.bb.hasRemaining()) {
                         sentCount++;
+                        //把它从队列头部删除掉
                         outgoingQueue.removeFirstOccurrence(p);
                         if (p.requestHeader != null
                                 && p.requestHeader.getType() != OpCode.ping
@@ -341,6 +345,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     void doTransport(int waitTimeOut, List<Packet> pendingQueue, LinkedList<Packet> outgoingQueue,
                      ClientCnxn cnxn)
             throws IOException, InterruptedException {
+        //之前基于NIO建立连接完毕之后，它关注的是OP_READ和OP_WRITE
+        //当前这个连接如果有zk服务器的响应发送过来，此时会触发OP_READ，
+        //如果是可以写数据出去，会触发OP_WRITE
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
@@ -358,7 +365,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     sendThread.primeConnection();
                 }
             } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
-                //关注读写请求
+                //处理读写请求
                 doIO(pendingQueue, outgoingQueue, cnxn);
             }
         }

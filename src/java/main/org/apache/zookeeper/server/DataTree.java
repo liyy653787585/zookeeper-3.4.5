@@ -519,7 +519,11 @@ public class DataTree {
             updateCount(lastPrefix, 1);
             updateBytes(lastPrefix, data == null ? 0 : data.length);
         }
+
+        //触发这个znode不同类型的watch监听
+        //触发这个znode的节点创建类型watch
         dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
+        //针对这个znode的父节点来说，它的父节点下的子节点变化了，那么触发它父节点的watch监听
         childWatches.triggerWatch(parentName.equals("") ? "/" : parentName,
                 Event.EventType.NodeChildrenChanged);
         return path;
@@ -649,6 +653,7 @@ public class DataTree {
         }
         synchronized (n) {
             n.copyStat(stat);
+            //将serverCnxn（实现了watcher接口）(代表与客户端的nio连接)注册到服务端的watchManager中
             if (watcher != null) {
                 dataWatches.addWatch(path, watcher);
             }
@@ -788,6 +793,8 @@ public class DataTree {
                 case OpCode.create:
                     CreateTxn createTxn = (CreateTxn) txn;
                     rc.path = createTxn.getPath();
+                    //执行znode创建逻辑
+                    //触发对应znode的watch监听
                     createNode(
                             createTxn.getPath(),
                             createTxn.getData(),

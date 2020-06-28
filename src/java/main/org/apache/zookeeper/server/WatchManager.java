@@ -70,6 +70,12 @@ public class WatchManager {
             watch2Paths.put(watcher, paths);
         }
         paths.add(path);
+
+        //path -> watcher集合（有哪些客户端都监听了这个path的变化）
+        //watcher（客户端连接） -> path集合 （这个数据结构为了方便session断开的一些清理工作）
+        //如果说一单客户端的session断开，zk服务端要进行以下清理
+        //（1）删除这个客户端创建的临时节点
+        // (2) 删除这个客户端注册的监听器
     }
 
     public synchronized void removeWatcher(Watcher watcher) {
@@ -97,6 +103,7 @@ public class WatchManager {
                 KeeperState.SyncConnected, path);
         HashSet<Watcher> watchers;
         synchronized (this) {
+            //监听一旦触发就会被删除掉，所以在zk原生api中watch是一次性的
             watchers = watchTable.remove(path);
             if (watchers == null || watchers.isEmpty()) {
                 if (LOG.isTraceEnabled()) {
@@ -106,6 +113,7 @@ public class WatchManager {
                 }
                 return null;
             }
+            //监听一旦触发就会被删除掉，所以在zk原生api中watch是一次性的
             for (Watcher w : watchers) {
                 HashSet<String> paths = watch2Paths.get(w);
                 if (paths != null) {
@@ -113,10 +121,14 @@ public class WatchManager {
                 }
             }
         }
+
+        //对监听了这个path的所有watchers监听进行处理
         for (Watcher w : watchers) {
             if (supress != null && supress.contains(w)) {
                 continue;
             }
+            //实现类为NIOServerCnxn，添加watch时设置的
+            //调用NIOServerCnxn.process()进行回调处理
             w.process(e);
         }
         return watchers;
